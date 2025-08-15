@@ -1,10 +1,13 @@
 package priv.study.server.context;
 
 import jakarta.servlet.*;
+import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.descriptor.JspConfigDescriptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import priv.study.server.engine.FilterChainImpl;
+import priv.study.server.engine.FilterRegistrationImpl;
 import priv.study.server.engine.ServletRegistrationImpl;
 
 import java.io.IOException;
@@ -24,15 +27,25 @@ public class ServletContextImpl implements ServletContext {
     private final List<ServletMappig> servletMappings = new ArrayList<>();
     private final Map<String, ServletRegistration.Dynamic> nameToRegistrationMap = new HashMap<>();
 
+    private final List<FilterMapping> filterMappings = new ArrayList<>();
+    private final Map<String, FilterRegistration.Dynamic> nameToFilterRegistrationMap = new HashMap<>();
+
+    public void initialize(List<Class<? extends Servlet>> servletClasses, List<Class<? extends Filter>> filterClasses) {
+        this.initializeServlet(servletClasses);
+        this.initializeFilter(filterClasses);
+    }
+
+
     /**
      * 初始化所有的Servlet
+     *
+     * @param servletClasses servlet 类
      */
-    public void initialize(List<Class<?>> servletClasses) {
+    private void initializeServlet(List<Class<? extends Servlet>> servletClasses) {
         // 根据 Servlet 类型创建对象，并且进行注册
-        for (Class<?> servletClass : servletClasses) {
+        for (Class<? extends Servlet> servletClass : servletClasses) {
             WebServlet annotation = servletClass.getAnnotation(WebServlet.class);
-            Class<? extends Servlet> cls = (Class<? extends Servlet>) servletClass;
-            ServletRegistration.Dynamic registration = this.addServlet(annotation.name(), cls);
+            ServletRegistration.Dynamic registration = this.addServlet(annotation.name(), servletClass);
             // 添加映射关系
             registration.addMapping(annotation.urlPatterns());
         }
@@ -44,6 +57,32 @@ public class ServletContextImpl implements ServletContext {
             for (String pattern : urlPatterns) {
                 ServletMappig mapping = new ServletMappig(pattern, registration.getServlet());
                 servletMappings.add(mapping);
+            }
+        }
+    }
+
+    /**
+     * 初始化过滤器
+     *
+     * @param filterClasses filter 类
+     */
+    private void initializeFilter(List<Class<? extends Filter>> filterClasses) {
+
+        // 初始化 filter 列表
+        for (Class<? extends Filter> filterClass : filterClasses) {
+            WebFilter webFilter = filterClass.getAnnotation(WebFilter.class);
+            String filterName = webFilter.filterName();
+            FilterRegistration.Dynamic filterRegistration = addFilter(filterName, filterClass);
+            filterRegistration.addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), true, webFilter.urlPatterns());
+        }
+
+        // 初始化 filterMapping
+        for (String name : nameToFilterRegistrationMap.keySet()) {
+            FilterRegistrationImpl filterRegistration = (FilterRegistrationImpl) nameToFilterRegistrationMap.get(name);
+            Collection<String> urlPatternMappings = filterRegistration.getUrlPatternMappings();
+            for (String urlPatternMapping : urlPatternMappings) {
+                FilterMapping filterMapping = new FilterMapping(urlPatternMapping, filterRegistration.getFilter());
+                filterMappings.add(filterMapping);
             }
         }
     }
@@ -64,7 +103,15 @@ public class ServletContextImpl implements ServletContext {
             pw.close();
             return;
         }
-        servlet.service(httpServletRequest, httpServletResponse);
+
+        // 查找能够处理该请求的过滤器
+        Filter[] filters = filterMappings.stream()
+                .filter(filterMapping -> filterMapping.match(path) != null)
+                .map(filterMapping -> filterMapping.match(path))
+                .toArray(Filter[]::new);
+        // 执行过滤去链
+        FilterChainImpl chain = new FilterChainImpl(filters, servlet);
+        chain.doFilter(httpServletRequest, httpServletResponse);
     }
 
     @Override
@@ -243,12 +290,26 @@ public class ServletContextImpl implements ServletContext {
 
     @Override
     public FilterRegistration.Dynamic addFilter(String s, Filter filter) {
-        return null;
+        if (Objects.isNull(filter)) {
+            throw new IllegalArgumentException("注册 Servlet 的类型参数为空");
+        }
+        FilterRegistrationImpl filterRegistration = new FilterRegistrationImpl(s, filter);
+        nameToFilterRegistrationMap.put(s, filterRegistration);
+        return filterRegistration;
     }
 
     @Override
     public FilterRegistration.Dynamic addFilter(String s, Class<? extends Filter> aClass) {
-        return null;
+        if (Objects.isNull(aClass)) {
+            throw new IllegalArgumentException("注册 Servlet 的类型参数为空");
+        }
+        // 创建 Servlet 对象
+        try {
+            Filter servlet = aClass.getDeclaredConstructor().newInstance();
+            return addFilter(s, servlet);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override

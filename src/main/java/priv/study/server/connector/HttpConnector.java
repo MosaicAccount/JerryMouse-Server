@@ -12,6 +12,9 @@ import org.slf4j.LoggerFactory;
 import priv.study.server.context.ServletContextImpl;
 import priv.study.server.engine.HttpServletRequestImpl;
 import priv.study.server.engine.HttpServletResponseImpl;
+import priv.study.server.filter.BasicFilter;
+import priv.study.server.filter.HelloFilter;
+import priv.study.server.filter.NoHelloFilter;
 import priv.study.server.servlet.HelloServletImpl;
 import priv.study.server.servlet.NoHelloServletImpl;
 
@@ -35,12 +38,12 @@ public class HttpConnector implements HttpHandler, AutoCloseable {
     private final Logger logger = LoggerFactory.getLogger(HttpConnector.class);
 
     public HttpConnector() throws IOException {
+        servletContext = new ServletContextImpl();
+        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class), List.of(NoHelloFilter.class, HelloFilter.class, BasicFilter.class));
         String host = "0.0.0.0";
         int port = 9999;
         this.httpServer = HttpServer.create(new InetSocketAddress(host, port), 0, "/", this);
         this.httpServer.start();
-        servletContext = new ServletContextImpl();
-        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class));
         logger.info("web 服务已启动，端口为{}", port);
     }
 

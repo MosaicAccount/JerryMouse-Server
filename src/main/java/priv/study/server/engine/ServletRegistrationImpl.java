@@ -17,11 +17,12 @@ public class ServletRegistrationImpl implements ServletRegistration.Dynamic {
 
     private String name;
     private Servlet servlet;
-    private final List<String> urlPatterns = new ArrayList<>();
+    private final List<String> urlPatterns;
 
     public ServletRegistrationImpl(String name, Servlet servlet) {
         this.name = name;
         this.servlet = servlet;
+        urlPatterns = new ArrayList<>();
     }
 
     public Servlet getServlet() {
