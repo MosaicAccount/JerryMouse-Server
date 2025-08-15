@@ -22,6 +22,8 @@ public class HttpServletResponseImpl implements HttpServletResponse {
 
     private final HttpExchangeResponse httpExchangeResponse;
 
+    private boolean commitstatus; // 响应是否已经提交
+
     public HttpServletResponseImpl(HttpExchangeResponse httpExchangeResponse) {
         this.httpExchangeResponse = httpExchangeResponse;
     }
@@ -133,6 +135,9 @@ public class HttpServletResponseImpl implements HttpServletResponse {
 
     @Override
     public PrintWriter getWriter() throws IOException {
+        this.checkCommitted();
+
+
         this.httpExchangeResponse.sendResponseHeaders(200, 0);
         return new PrintWriter(this.httpExchangeResponse.getResponseBody(), true, StandardCharsets.UTF_8);
     }
@@ -180,7 +185,7 @@ public class HttpServletResponseImpl implements HttpServletResponse {
 
     @Override
     public boolean isCommitted() {
-        return false;
+        return this.commitstatus;
     }
 
     @Override
@@ -196,5 +201,11 @@ public class HttpServletResponseImpl implements HttpServletResponse {
     @Override
     public Locale getLocale() {
         return null;
+    }
+
+    private void checkCommitted() throws IOException {
+        if (this.commitstatus) {
+            throw new IllegalStateException("响应已经被提交");
+        }
     }
 }

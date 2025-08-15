@@ -2,8 +2,9 @@ package priv.study.server.engine;
 
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
-import priv.study.server.connector.HttpExchangeAdapter;
 import priv.study.server.connector.HttpExchangeRequest;
+import priv.study.server.context.ServletContextImpl;
+import priv.study.server.context.SessionManager;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -24,8 +25,14 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     private final HttpExchangeRequest httpExchangeRequest;
 
-    public HttpServletRequestImpl(HttpExchangeRequest httpExchangeRequest) {
+    private final ServletContextImpl servletContext;
+
+    private final HttpServletResponse httpServletResponse;
+
+    public HttpServletRequestImpl(HttpExchangeRequest httpExchangeRequest, ServletContextImpl servletContext, HttpServletResponse httpServletResponse) {
         this.httpExchangeRequest = httpExchangeRequest;
+        this.servletContext = servletContext;
+        this.httpServletResponse = httpServletResponse;
     }
 
     @Override
@@ -125,11 +132,39 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     @Override
     public HttpSession getSession(boolean b) {
-        return null;
+        String sessionId = null;
+        SessionManager sessionManager = this.servletContext.getSessionManager();
+        // 通过 cookie 获取 sessionId
+        Cookie[] cookies = this.getCookies();
+        for (Cookie cookie : cookies) {
+            if ("JSESSIONID".equals(cookie.getName())) {
+                sessionId = cookie.getValue();
+                break;
+            }
+        }
+        if (Objects.isNull(sessionId) && !b) {
+            return null;
+        }
+
+        // 创建一个 sessionId
+        if (Objects.isNull(sessionId)) {
+            if (httpServletResponse.isCommitted()) {
+                throw new IllegalStateException("当前请求已经被提交，无法设置session");
+            }
+            // 创建随机字符串作为SessionID:
+            sessionId = UUID.randomUUID().toString();
+            // 构造一个名为JSESSIONID的Cookie:
+            String cookieValue = "JSESSIONID=" + sessionId + "; Path=/; SameSite=Strict; HttpOnly";
+            // 添加到HttpServletResponse的Header:
+            this.httpServletResponse.addHeader("Set-Cookie", cookieValue);
+        }
+
+        return sessionManager.getSession(sessionId);
     }
 
     @Override
     public HttpSession getSession() {
+
         return null;
     }
 

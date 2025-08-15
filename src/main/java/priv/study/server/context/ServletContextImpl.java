@@ -30,11 +30,20 @@ public class ServletContextImpl implements ServletContext {
     private final List<FilterMapping> filterMappings = new ArrayList<>();
     private final Map<String, FilterRegistration.Dynamic> nameToFilterRegistrationMap = new HashMap<>();
 
+    private final SessionManager sessionManager;
+
+    public ServletContextImpl() {
+        this.sessionManager = new SessionManager(this);
+    }
+
     public void initialize(List<Class<? extends Servlet>> servletClasses, List<Class<? extends Filter>> filterClasses) {
         this.initializeServlet(servletClasses);
         this.initializeFilter(filterClasses);
     }
 
+    public SessionManager getSessionManager() {
+        return sessionManager;
+    }
 
     /**
      * 初始化所有的Servlet
