@@ -5,10 +5,8 @@ import jakarta.servlet.Servlet;
 import jakarta.servlet.ServletRegistration;
 import jakarta.servlet.ServletSecurityElement;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * @author JLian
@@ -19,6 +17,7 @@ public class ServletRegistrationImpl implements ServletRegistration.Dynamic {
 
     private String name;
     private Servlet servlet;
+    private final List<String> urlPatterns = new ArrayList<>();
 
     public ServletRegistrationImpl(String name, Servlet servlet) {
         this.name = name;
@@ -35,6 +34,10 @@ public class ServletRegistrationImpl implements ServletRegistration.Dynamic {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public List<String> getUrlPatterns() {
+        return urlPatterns;
     }
 
     @Override
@@ -64,7 +67,8 @@ public class ServletRegistrationImpl implements ServletRegistration.Dynamic {
 
     @Override
     public Set<String> addMapping(String... strings) {
-        return Set.of();
+        urlPatterns.addAll(Arrays.asList(strings));
+        return new HashSet<>(urlPatterns);
     }
 
     @Override

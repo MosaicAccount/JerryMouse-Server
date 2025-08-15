@@ -21,9 +21,8 @@ import java.util.*;
  */
 public class ServletContextImpl implements ServletContext {
 
-    private final List<ServletMappig> servletMappigs = new ArrayList<>();
-    private final Map<String, Object> nameToRegistrationMap = new HashMap<>();
-
+    private final List<ServletMappig> servletMappings = new ArrayList<>();
+    private final Map<String, ServletRegistration.Dynamic> nameToRegistrationMap = new HashMap<>();
 
     /**
      * 初始化所有的Servlet
@@ -34,19 +33,29 @@ public class ServletContextImpl implements ServletContext {
             WebServlet annotation = servletClass.getAnnotation(WebServlet.class);
             Class<? extends Servlet> cls = (Class<? extends Servlet>) servletClass;
             ServletRegistration.Dynamic registration = this.addServlet(annotation.name(), cls);
-
             // 添加映射关系
             registration.addMapping(annotation.urlPatterns());
         }
-
-
+        // 初始化 servletMappings 列表
+        for (String key : nameToRegistrationMap.keySet()) {
+            ServletRegistrationImpl registration = (ServletRegistrationImpl) nameToRegistrationMap.get(key);
+            // 创建 ServletMapping 对象
+            List<String> urlPatterns = registration.getUrlPatterns();
+            for (String pattern : urlPatterns) {
+                ServletMappig mapping = new ServletMappig(pattern, registration.getServlet());
+                servletMappings.add(mapping);
+            }
+        }
     }
 
     public void process(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) throws IOException, ServletException {
-        String path = String.valueOf(httpServletRequest.getRequestURL());
+        String path = httpServletRequest.getRequestURI();
         Servlet servlet = null;
-        for (ServletMappig servletMappig : servletMappigs) {
-            servlet = servletMappig.match(path);
+        for (ServletMappig servletMapping : servletMappings) {
+            servlet = servletMapping.match(path);
+            if (Objects.nonNull(servlet)) {
+                break;
+            }
         }
         if (Objects.isNull(servlet)) {
             // 404 处理

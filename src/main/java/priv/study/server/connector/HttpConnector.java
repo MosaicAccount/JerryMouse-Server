@@ -3,16 +3,22 @@ package priv.study.server.connector;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import priv.study.server.context.ServletContextImpl;
 import priv.study.server.engine.HttpServletRequestImpl;
 import priv.study.server.engine.HttpServletResponseImpl;
+import priv.study.server.servlet.HelloServletImpl;
+import priv.study.server.servlet.NoHelloServletImpl;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
+import java.util.List;
 
 /**
  * 处理 http 请求
@@ -21,16 +27,20 @@ import java.net.InetSocketAddress;
  * @version 0.0.1
  * @since 0.0.1
  */
-public class HttpConnector implements HttpHandler, AutoCloseable{
+public class HttpConnector implements HttpHandler, AutoCloseable {
 
     private final HttpServer httpServer;
+    private final ServletContextImpl servletContext;
+
     private final Logger logger = LoggerFactory.getLogger(HttpConnector.class);
 
     public HttpConnector() throws IOException {
         String host = "0.0.0.0";
         int port = 9999;
-        this.httpServer =  HttpServer.create(new InetSocketAddress(host, port), 0, "/", this);
+        this.httpServer = HttpServer.create(new InetSocketAddress(host, port), 0, "/", this);
         this.httpServer.start();
+        servletContext = new ServletContextImpl();
+        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class));
         logger.info("web 服务已启动，端口为{}", port);
     }
 
@@ -42,13 +52,12 @@ public class HttpConnector implements HttpHandler, AutoCloseable{
         process(httpServletRequest, httpServletResponse);
     }
 
-    void process(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) throws IOException {
-        String name = httpServletRequest.getParameter("name");
-        httpServletResponse.setContentType("text/html");
-        String responseBody = "<html><body><h1>Hello! " + name + "</h1></body></html>";
-        PrintWriter writer = httpServletResponse.getWriter();
-        writer.write(responseBody);
-        writer.close() ;
+    void process(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
+        try {
+            servletContext.process(httpServletRequest, httpServletResponse);
+        } catch (IOException | ServletException e) {
+            logger.error("请求处理失败。", e);
+        }
     }
 
     @Override
