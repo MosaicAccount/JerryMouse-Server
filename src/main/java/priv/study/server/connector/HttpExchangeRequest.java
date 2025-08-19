@@ -1,5 +1,7 @@
 package priv.study.server.connector;
 
+import com.sun.net.httpserver.Headers;
+
 import java.net.URI;
 
 /**
@@ -12,4 +14,5 @@ public interface HttpExchangeRequest {
 
     URI getRequestURI();
 
+    Headers getRequestHeaders();
 }

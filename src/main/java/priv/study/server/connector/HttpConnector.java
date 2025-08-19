@@ -3,7 +3,6 @@ package priv.study.server.connector;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -16,10 +15,10 @@ import priv.study.server.filter.BasicFilter;
 import priv.study.server.filter.HelloFilter;
 import priv.study.server.filter.NoHelloFilter;
 import priv.study.server.servlet.HelloServletImpl;
+import priv.study.server.servlet.LoginServlet;
 import priv.study.server.servlet.NoHelloServletImpl;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.util.List;
 
@@ -39,7 +38,7 @@ public class HttpConnector implements HttpHandler, AutoCloseable {
 
     public HttpConnector() throws IOException {
         servletContext = new ServletContextImpl();
-        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class), List.of(NoHelloFilter.class, HelloFilter.class, BasicFilter.class));
+        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class, LoginServlet.class), List.of(NoHelloFilter.class, HelloFilter.class, BasicFilter.class));
         String host = "0.0.0.0";
         int port = 9999;
         this.httpServer = HttpServer.create(new InetSocketAddress(host, port), 0, "/", this);
@@ -50,8 +49,8 @@ public class HttpConnector implements HttpHandler, AutoCloseable {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         HttpExchangeAdapter httpExchangeAdapter = new HttpExchangeAdapter(exchange);
-        HttpServletRequestImpl httpServletRequest = new HttpServletRequestImpl(httpExchangeAdapter);
         HttpServletResponseImpl httpServletResponse = new HttpServletResponseImpl(httpExchangeAdapter);
+        HttpServletRequestImpl httpServletRequest = new HttpServletRequestImpl(httpExchangeAdapter, servletContext, httpServletResponse);
         process(httpServletRequest, httpServletResponse);
     }
 
