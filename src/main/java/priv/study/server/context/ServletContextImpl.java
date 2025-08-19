@@ -39,6 +39,9 @@ public class ServletContextImpl implements ServletContext {
     public void initialize(List<Class<? extends Servlet>> servletClasses, List<Class<? extends Filter>> filterClasses) {
         this.initializeServlet(servletClasses);
         this.initializeFilter(filterClasses);
+        Thread thread = new Thread(sessionManager);
+        thread.setDaemon(true);
+        thread.start();
     }
 
     public SessionManager getSessionManager() {

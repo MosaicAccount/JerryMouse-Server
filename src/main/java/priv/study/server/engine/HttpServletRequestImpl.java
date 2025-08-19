@@ -3,6 +3,7 @@ package priv.study.server.engine;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import priv.study.server.connector.HttpExchangeRequest;
+import priv.study.server.engine.support.HttpHeaders;
 import priv.study.server.context.ServletContextImpl;
 import priv.study.server.context.SessionManager;
 
@@ -14,7 +15,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.*;
+import java.util.jar.Attributes;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * @author JLian
@@ -29,10 +32,16 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     private final HttpServletResponse httpServletResponse;
 
+    private final Attributes attributes;
+
+    private final HttpHeaders headers;
+
     public HttpServletRequestImpl(HttpExchangeRequest httpExchangeRequest, ServletContextImpl servletContext, HttpServletResponse httpServletResponse) {
         this.httpExchangeRequest = httpExchangeRequest;
         this.servletContext = servletContext;
         this.httpServletResponse = httpServletResponse;
+        this.attributes = new Attributes();
+        this.headers = new HttpHeaders(httpExchangeRequest.getRequestHeaders());
     }
 
     @Override
@@ -42,37 +51,40 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     @Override
     public Cookie[] getCookies() {
-        return new Cookie[0];
+        String header = this.getHeader("Cookie");
+        return this.parseCookies(header).toArray(Cookie[]::new);
     }
 
     @Override
     public long getDateHeader(String s) {
-        return 0;
+        return headers.getDateHeader(s);
     }
 
     @Override
     public String getHeader(String s) {
-        return "";
+        return headers.getHeader(s);
     }
 
     @Override
     public Enumeration<String> getHeaders(String s) {
-        return null;
+        List<String> headerList = headers.getHeaders(s);
+
+        return Collections.enumeration(headerList);
     }
 
     @Override
     public Enumeration<String> getHeaderNames() {
-        return null;
+        return Collections.enumeration(headers.getHeaderNames());
     }
 
     @Override
     public int getIntHeader(String s) {
-        return 0;
+        return headers.getIntHeader(s);
     }
 
     @Override
     public String getMethod() {
-        return "";
+        return httpExchangeRequest.getRequestMethod();
     }
 
     @Override
@@ -158,14 +170,12 @@ public class HttpServletRequestImpl implements HttpServletRequest {
             // 添加到HttpServletResponse的Header:
             this.httpServletResponse.addHeader("Set-Cookie", cookieValue);
         }
-
         return sessionManager.getSession(sessionId);
     }
 
     @Override
     public HttpSession getSession() {
-
-        return null;
+        return this.getSession(true);
     }
 
     @Override
@@ -220,12 +230,13 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     @Override
     public Object getAttribute(String s) {
-        return null;
+        return this.attributes.get(s);
     }
 
     @Override
     public Enumeration<String> getAttributeNames() {
-        return null;
+        Set<Object> keyset = this.attributes.keySet();
+        return Collections.enumeration(keyset.stream().map(String::valueOf).collect(Collectors.toSet()));
     }
 
     @Override
@@ -338,12 +349,12 @@ public class HttpServletRequestImpl implements HttpServletRequest {
 
     @Override
     public void setAttribute(String s, Object o) {
-
+        this.attributes.put(new Attributes.Name(s), o);
     }
 
     @Override
     public void removeAttribute(String s) {
-
+        this.attributes.remove(s);
     }
 
     @Override
@@ -434,5 +445,38 @@ public class HttpServletRequestImpl implements HttpServletRequest {
     @Override
     public ServletConnection getServletConnection() {
         return null;
+    }
+
+    private List<Cookie> parseCookies(String cookieHeader) {
+        if (cookieHeader == null || cookieHeader.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Cookie> cookies = new ArrayList<>();
+        String[] cookiePairs = cookieHeader.split(";\\s*");
+
+        for (String cookiePair : cookiePairs) {
+            String[] nameValue = cookiePair.split("=", 2);
+            if (nameValue.length == 2) {
+                String name = nameValue[0].trim();
+                String value = nameValue[1].trim();
+
+                // 处理被引号包围的值
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+
+                try {
+                    value = URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+                } catch (UnsupportedEncodingException e) {
+                    // 忽略异常
+                }
+
+                Cookie cookie = new Cookie(name, value);
+                cookies.add(cookie);
+            }
+        }
+
+        return cookies;
     }
 }

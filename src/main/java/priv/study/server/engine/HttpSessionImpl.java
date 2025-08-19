@@ -7,8 +7,11 @@ import org.slf4j.LoggerFactory;
 import priv.study.server.context.ServletContextImpl;
 import priv.study.server.context.SessionManager;
 
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.Set;
 import java.util.jar.Attributes;
+import java.util.stream.Collectors;
 
 /**
  * HttpSession 的实现类
@@ -25,9 +28,11 @@ public class HttpSessionImpl implements HttpSession {
 
     private int inactiveInterval; // session 过期时间
 
-    private long creationTime; // 创建时间
+    private final long creationTime; // 创建时间
 
     private long lastAccessedTime; // 上次修改时间
+
+    private int maxInactiveInterval;
 
     private final Attributes attributes;
 
@@ -36,6 +41,7 @@ public class HttpSessionImpl implements HttpSession {
         this.sessionId = sessionId;
         this.inactiveInterval = inactiveInterval;
         this.creationTime = System.currentTimeMillis();
+         this.lastAccessedTime = this.creationTime;
         this.attributes = new Attributes();
     }
 
@@ -61,31 +67,37 @@ public class HttpSessionImpl implements HttpSession {
 
     @Override
     public void setMaxInactiveInterval(int interval) {
+        this.maxInactiveInterval = interval;
     }
 
     @Override
     public int getMaxInactiveInterval() {
-        return 0;
+        return this.maxInactiveInterval;
     }
 
     @Override
     public Object getAttribute(String name) {
-        return null;
+        this.updateLastAccessedTime();
+        return attributes.get(name);
     }
 
     @Override
     public Enumeration<String> getAttributeNames() {
-        return null;
+        this.updateLastAccessedTime();
+        Set<Object> keyset = this.attributes.keySet();
+        return Collections.enumeration(keyset.stream().map(String::valueOf).collect(Collectors.toSet()));
     }
 
     @Override
     public void setAttribute(String name, Object value) {
-
+        this.attributes.put(new Attributes.Name(name), value);
+        this.updateLastAccessedTime();
     }
 
     @Override
     public void removeAttribute(String name) {
-
+        this.attributes.remove(name);
+        this.updateLastAccessedTime();
     }
 
     @Override
@@ -97,5 +109,9 @@ public class HttpSessionImpl implements HttpSession {
     @Override
     public boolean isNew() {
         return false;
+    }
+
+    private void updateLastAccessedTime() {
+        this.lastAccessedTime = System.currentTimeMillis();
     }
 }

@@ -39,7 +39,6 @@ public class HttpServletResponseImpl implements HttpServletResponse {
 
     @Override
     public void addCookie(Cookie cookie) {
-
         this.httpExchangeResponse.getResponseHeaders().add(cookie.getName(), cookie.getValue());
 
     }
@@ -112,7 +111,8 @@ public class HttpServletResponseImpl implements HttpServletResponse {
     public void setStatus(int i) {
         try {
             this.checkCommitted();
-            this.httpExchangeResponse.sendResponseHeaders(i, -1);
+            this.status = i;
+            this.httpExchangeResponse.sendResponseHeaders(i, this.contentLength);
             this.committed = true;
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -153,17 +153,12 @@ public class HttpServletResponseImpl implements HttpServletResponse {
     @Override
     public ServletOutputStream getOutputStream() throws IOException {
         OutputStream responseBody = this.httpExchangeResponse.getResponseBody();
-
-
-
-
-        return null;
+        this.outputStream = new ServletOutputStreamImpl(responseBody);
+        return this.outputStream;
     }
 
     @Override
     public PrintWriter getWriter() throws IOException {
-        this.checkCommitted();
-        this.committed = true;
         return new PrintWriter(this.httpExchangeResponse.getResponseBody(), true, StandardCharsets.UTF_8);
     }
 
@@ -203,9 +198,8 @@ public class HttpServletResponseImpl implements HttpServletResponse {
         if (Objects.isNull(outputStream)) {
             throw new IllegalStateException("输出流为空");
         }
-
         outputStream.flush();
-
+        this.outputStream.close();
         this.committed = true;
     }
 
