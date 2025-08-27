@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequestEvent;
+import jakarta.servlet.ServletRequestListener;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -11,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import priv.study.server.context.ServletContextImpl;
 import priv.study.server.engine.HttpServletRequestImpl;
 import priv.study.server.engine.HttpServletResponseImpl;
+import priv.study.server.engine.listener.RequestLoggerListener;
 import priv.study.server.filter.BasicFilter;
 import priv.study.server.filter.HelloFilter;
 import priv.study.server.filter.NoHelloFilter;
@@ -21,6 +24,7 @@ import priv.study.server.servlet.NoHelloServletImpl;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 处理 http 请求
@@ -38,7 +42,8 @@ public class HttpConnector implements HttpHandler, AutoCloseable {
 
     public HttpConnector() throws IOException {
         servletContext = new ServletContextImpl();
-        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class, LoginServlet.class), List.of(NoHelloFilter.class, HelloFilter.class, BasicFilter.class));
+        servletContext.initialize(List.of(HelloServletImpl.class, NoHelloServletImpl.class, LoginServlet.class), List.of(NoHelloFilter.class, HelloFilter.class,
+                BasicFilter.class), List.of(RequestLoggerListener.class));
         String host = "0.0.0.0";
         int port = 9999;
         this.httpServer = HttpServer.create(new InetSocketAddress(host, port), 0, "/", this);
@@ -55,10 +60,22 @@ public class HttpConnector implements HttpHandler, AutoCloseable {
     }
 
     void process(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
+        List<ServletRequestListener> listeners = servletContext.getServletRequestListeners();
+        if (Objects.nonNull(listeners)) {
+            for (ServletRequestListener listener : listeners) {
+                listener.requestInitialized(new ServletRequestEvent(servletContext, httpServletRequest));
+            }
+        }
         try {
             servletContext.process(httpServletRequest, httpServletResponse);
         } catch (IOException | ServletException e) {
             logger.error("请求处理失败。", e);
+        } finally {
+            if (Objects.nonNull(listeners)) {
+                for (ServletRequestListener listener : listeners) {
+                    listener.requestDestroyed(new ServletRequestEvent(servletContext, httpServletRequest));
+                }
+            }
         }
     }
 

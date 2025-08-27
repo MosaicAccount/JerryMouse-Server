@@ -2,10 +2,15 @@ package priv.study.server.context;
 
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
+import jakarta.servlet.annotation.WebListener;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.descriptor.JspConfigDescriptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSessionAttributeListener;
+import jakarta.servlet.http.HttpSessionListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import priv.study.server.engine.FilterChainImpl;
 import priv.study.server.engine.FilterRegistrationImpl;
 import priv.study.server.engine.ServletRegistrationImpl;
@@ -18,12 +23,15 @@ import java.net.URL;
 import java.util.*;
 
 /**
+ * Servlet 上下文管理（全局只有一个）
+ *
  * @author JLian
  * @version 0.0.1
  * @since 0.0.1
  */
 public class ServletContextImpl implements ServletContext {
 
+    private static final Logger log = LoggerFactory.getLogger(ServletContextImpl.class);
     private final List<ServletMappig> servletMappings = new ArrayList<>();
     private final Map<String, ServletRegistration.Dynamic> nameToRegistrationMap = new HashMap<>();
 
@@ -32,20 +40,60 @@ public class ServletContextImpl implements ServletContext {
 
     private final SessionManager sessionManager;
 
+    // Servlet监听器
+    private List<ServletContextListener> servletContextListeners = null;
+    private List<ServletContextAttributeListener> servletContextAttributeListeners = null;
+    private List<ServletRequestListener> servletRequestListeners = null;
+    private List<ServletRequestAttributeListener> servletRequestAttributeListeners = null;
+    private List<HttpSessionAttributeListener> httpSessionAttributeListeners = null;
+    private List<HttpSessionListener> httpSessionListeners = null;
+
     public ServletContextImpl() {
         this.sessionManager = new SessionManager(this);
     }
 
-    public void initialize(List<Class<? extends Servlet>> servletClasses, List<Class<? extends Filter>> filterClasses) {
+    public SessionManager getSessionManager() {
+        return sessionManager;
+    }
+
+    public List<ServletContextListener> getServletContextListeners() {
+        return servletContextListeners;
+    }
+
+    public List<ServletContextAttributeListener> getServletContextAttributeListeners() {
+        return servletContextAttributeListeners;
+    }
+
+    public List<ServletRequestListener> getServletRequestListeners() {
+        return servletRequestListeners;
+    }
+
+    public List<ServletRequestAttributeListener> getServletRequestAttributeListeners() {
+        return servletRequestAttributeListeners;
+    }
+
+    public List<HttpSessionAttributeListener> getHttpSessionAttributeListeners() {
+        return httpSessionAttributeListeners;
+    }
+
+    public List<HttpSessionListener> getHttpSessionListeners() {
+        return httpSessionListeners;
+    }
+
+    public void initialize(List<Class<? extends Servlet>> servletClasses, List<Class<? extends Filter>> filterClasses, List<Class<? extends EventListener>> listenerClasses) {
         this.initializeServlet(servletClasses);
         this.initializeFilter(filterClasses);
+        this.initializeListeners(listenerClasses);
+        // 触发上下文监听器
+        if (Objects.nonNull(servletContextListeners)) {
+            for (ServletContextListener listener : servletContextListeners) {
+                listener.contextInitialized(new ServletContextEvent(this));
+            }
+        }
+        // 启动 session 管理器
         Thread thread = new Thread(sessionManager);
         thread.setDaemon(true);
         thread.start();
-    }
-
-    public SessionManager getSessionManager() {
-        return sessionManager;
     }
 
     /**
@@ -99,6 +147,16 @@ public class ServletContextImpl implements ServletContext {
         }
     }
 
+    private void initializeListeners(List<Class<? extends EventListener>> listenerClasses) {
+        if (Objects.nonNull(listenerClasses)) {
+            for (Class<? extends EventListener> listenerClass : listenerClasses) {
+                if (listenerClass.isAnnotationPresent(WebListener.class)) {
+                    this.addListener(listenerClass);
+                }
+            }
+        }
+    }
+
     public void process(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) throws IOException, ServletException {
         String path = httpServletRequest.getRequestURI();
         Servlet servlet = null;
@@ -117,10 +175,7 @@ public class ServletContextImpl implements ServletContext {
         }
 
         // 查找能够处理该请求的过滤器
-        Filter[] filters = filterMappings.stream()
-                .filter(filterMapping -> filterMapping.match(path) != null)
-                .map(filterMapping -> filterMapping.match(path))
-                .toArray(Filter[]::new);
+        Filter[] filters = filterMappings.stream().filter(filterMapping -> filterMapping.match(path) != null).map(filterMapping -> filterMapping.match(path)).toArray(Filter[]::new);
         // 执行过滤去链
         FilterChainImpl chain = new FilterChainImpl(filters, servlet);
         chain.doFilter(httpServletRequest, httpServletResponse);
@@ -361,17 +416,60 @@ public class ServletContextImpl implements ServletContext {
 
     @Override
     public void addListener(String s) {
-
+        try {
+            addListener((Class<? extends EventListener>) Class.forName(s));
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public <T extends EventListener> void addListener(T t) {
+        if (Objects.isNull(t)) {
+            throw new IllegalArgumentException("监听器参数为空");
+        }
+        if (t instanceof ServletContextListener listener) {
+            if (Objects.isNull(servletContextListeners)) {
+                servletContextListeners = new ArrayList<>();
+            }
+            servletContextListeners.add(listener);
+        } else if (t instanceof ServletContextAttributeListener listener) {
+            if (Objects.isNull(servletContextAttributeListeners)) {
+                servletContextAttributeListeners = new ArrayList<>();
+            }
+            servletContextAttributeListeners.add(listener);
+        } else if (t instanceof ServletRequestListener listener) {
+            if (Objects.isNull(servletRequestListeners)) {
+                servletRequestListeners = new ArrayList<>();
+            }
+            servletRequestListeners.add(listener);
+        } else if (t instanceof ServletRequestAttributeListener listener) {
+            if (Objects.isNull(servletRequestAttributeListeners)) {
+                servletRequestAttributeListeners = new ArrayList<>();
+            }
+            servletRequestAttributeListeners.add(listener);
+        } else if (t instanceof HttpSessionAttributeListener listener) {
+            if (Objects.isNull(httpSessionAttributeListeners)) {
+                httpSessionAttributeListeners = new ArrayList<>();
+            }
+            httpSessionAttributeListeners.add(listener);
+        } else if (t instanceof HttpSessionListener listener) {
+            if (Objects.isNull(httpSessionListeners)) {
+                httpSessionListeners = new ArrayList<>();
+            }
+            httpSessionListeners.add(listener);
+        }
+
 
     }
 
     @Override
     public void addListener(Class<? extends EventListener> aClass) {
-
+        try {
+            addListener(aClass.getDeclaredConstructor().newInstance());
+        } catch (Exception e) {
+            log.error("创建监听器出错，异常信息为：{}", e.getMessage());
+        }
     }
 
     @Override
